@@ -315,17 +315,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe1808936cc6c4b1caf144e9fe8dc53e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gridSize:
-    x: 32
-    y: 32
-    z: 32
-  isoLevel: 0
-  noiseOffset:
-    x: 0
-    y: 0
-    z: 0
-  noiseFrequency: 0.1
-  noiseAmplitude: 1
+  gridSettings: {fileID: 11400000, guid: 9f384f66e377745f5ad319a25d160937, type: 2}
+  noiseSettings: {fileID: 11400000, guid: 01ea8f08d0bc34a22a62076bca750c90, type: 2}
 --- !u!23 &2056611935
 MeshRenderer:
   m_ObjectHideFlags: 0

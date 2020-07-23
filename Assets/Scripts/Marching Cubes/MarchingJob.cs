@@ -1,10 +1,7 @@
-﻿using Unity.Collections.LowLevel.Unsafe;
-using Unity.Collections;
+﻿using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Burst;
 using Unity.Jobs;
-
-using System.Threading;
 
 using Saitama.ProceduralMesh;
 using Saitama.Mathematics;
@@ -141,22 +138,34 @@ public struct MarchingJob : IJobParallelFor
         v.AddRangeNoResize(_vertices);
     }
 
-    public static JobHandle Create(in float isoLevel, in int3 gridSize, in NativeArray<float> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
+    /// <summary>
+    /// Create and schedule new MarchingJob.
+    /// </summary>
+    /// <param name="isoLevel">The isolevel</param>
+    /// <param name="gridSize">The size of the grid</param>
+    /// <param name="gridNoise">The noise data.</param>
+    /// <param name="v">The vertices generated</param>
+    /// <param name="inputDeps">Job dependency</param>
+    /// <returns></returns>
+    public static JobHandle CreateAndSchedule(in ScriptableGrid gridSettings, in NativeArray<float> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
     {
-        var gridBlockAmount = (gridSize.x - 1) * (gridSize.y - 1) * (gridSize.z - 1);
+        if(gridSettings.PointAmount != gridNoise.Length)
+            throw new System.Exception($"The length of the grid ({gridSettings.PointAmount}) not equal to the length of {nameof(gridNoise)} ({gridNoise.Length}) !");
+
+        var gridBlockAmount = (gridSettings.size.x - 1) * (gridSettings.size.y - 1) * (gridSettings.size.z - 1);
         
         v = new NativeList<Vertex>(Constants.MAX_VERTEX_PER_BLOCK * gridBlockAmount, Allocator.TempJob);
 
         return new MarchingJob
         {
-            Isolevel    = isoLevel,
-            GridSize    = gridSize,
+            Isolevel    = gridSettings.isoLevel,
+            GridSize    = gridSettings.size,
             GridNoise   = gridNoise,
 
             Vertices    = v.AsParallelWriter(),
 
             VertexCounter = 0,
         }
-        .Schedule(gridSize.x * gridSize.y * gridSize.z, 1, inputDeps);
+        .Schedule(gridSettings.PointAmount, 1, inputDeps);
     }
 }

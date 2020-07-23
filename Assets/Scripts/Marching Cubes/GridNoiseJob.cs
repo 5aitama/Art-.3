@@ -20,6 +20,12 @@ public struct GridNoiseJob : IJobParallelFor
     [ReadOnly]
     public float Amplitude;
 
+    [ReadOnly]
+    public float Persistence;
+
+    [ReadOnly]
+    public int Octaves;
+
     [WriteOnly]
     public NativeArray<float> GridNoise;
 
@@ -29,19 +35,38 @@ public struct GridNoiseJob : IJobParallelFor
         var worldPos = pos + Offset;
 
         float y = worldPos.y / 2f;
-        GridNoise[index] = -y + noise.snoise((pos + Offset) * Frequency) * Amplitude + ((y % 4) / 2);
+        GridNoise[index] = -y + OctaveNoise(worldPos, Frequency, Amplitude, Persistence, Octaves) + ((y % 4) / 2);
     }
 
-    public static JobHandle Create(in int3 gridSize, in float3 noiseOffset, in float noiseFrequency, in float noiseAmplitude, out NativeArray<float> gridNoise, JobHandle inputDeps = default)
+    private float OctaveNoise(float3 pos, float frequency, float amplitude, float persistence, int octaves)
     {
-        gridNoise = new NativeArray<float>(gridSize.x * gridSize.y * gridSize.z, Allocator.TempJob);
+        var total = 0f;
+        var max = 0f;
+
+        for(var i = 0; i < octaves; i++) {
+            total += noise.snoise(pos * frequency) * amplitude;
+            
+            max += amplitude;
+            
+            amplitude *= persistence;
+            frequency *= 2f;
+        }
+
+        return total / max;
+    }
+
+    public static JobHandle CreateAndSchedule(in ScriptableGrid gridSettings, in ScriptableOctaveNoise noiseSettings, out NativeArray<float> gridNoise, JobHandle inputDeps = default)
+    {
+        gridNoise = new NativeArray<float>(gridSettings.PointAmount, Allocator.TempJob);
 
         return new GridNoiseJob
         {
-            GridSize    = gridSize,
-            Offset      = noiseOffset,
-            Frequency   = noiseFrequency,
-            Amplitude   = noiseAmplitude,
+            GridSize    = gridSettings.size,
+            Offset      = noiseSettings.position,
+            Frequency   = noiseSettings.frequency,
+            Amplitude   = noiseSettings.amplitude,
+            Persistence = noiseSettings.persistence,
+            Octaves     = noiseSettings.octaves,
             GridNoise   = gridNoise,
         }
         .Schedule(gridNoise.Length, 32, inputDeps);

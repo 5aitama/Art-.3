@@ -2,6 +2,7 @@
   "dependencies": {
     "com.saitama.mathematics": "https://github.com/5aitama/Saitama.Mathematics.git",
     "com.saitama.proceduralmesh": "https://github.com/5aitama/Saitama.ProceduralMesh.git",
+    "com.unity.burst": "1.4.0-preview.2",
     "com.unity.collab-proxy": "1.2.16",
     "com.unity.entities": "0.11.1-preview.4",
     "com.unity.ide.rider": "1.1.4",
