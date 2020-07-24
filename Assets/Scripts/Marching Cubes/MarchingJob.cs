@@ -1,4 +1,5 @@
-﻿using Unity.Collections;
+﻿using Unity.Collections.LowLevel.Unsafe;
+using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Burst;
 using Unity.Jobs;
@@ -39,8 +40,6 @@ public struct MarchingJob : IJobParallelFor
     [WriteOnly]
     public NativeList<Vertex>.ParallelWriter Vertices;
 
-    public int VertexCounter;
-
     public void Execute(int index)
     {
         var position = index.To3D(GridSize);
@@ -48,45 +47,45 @@ public struct MarchingJob : IJobParallelFor
         if(position.x >= GridSize.x - 1 || position.y >= GridSize.y - 1 || position.z >= GridSize.z - 1)
             return;
 
-        var gridEdges = GetGridValues(position, Allocator.Temp);
-        var cubeIndex = DetermineIndex(gridEdges);
+        var gridEdges = GetGridValues(position, GridSize, GridNoise, Allocator.Temp);
+        var cubeIndex = DetermineIndex(Isolevel, gridEdges);
 
         if(Constants.EdgeTable[cubeIndex] == 0)
             return;
         
-        var vertices = FindIntersectVertices(cubeIndex, gridEdges, Allocator.Temp);
+        var vertices = FindIntersectVertices(cubeIndex, Isolevel, gridEdges, Allocator.Temp);
 
         AddVertices(cubeIndex, vertices, ref Vertices);
     }
 
-    private NativeArray<GridEdge> GetGridValues(int3 position, Allocator allocator)
+    public static NativeArray<GridEdge> GetGridValues(in int3 position, in int3 gridSize, in NativeArray<float> gridNoise, Allocator allocator)
     {
         var values = new NativeArray<GridEdge>(8, allocator, NativeArrayOptions.UninitializedMemory);
 
-        values[0] = new GridEdge(position + new int3(0, 0, 1), GridSize, GridNoise);
-        values[1] = new GridEdge(position + new int3(1, 0, 1), GridSize, GridNoise);
-        values[2] = new GridEdge(position + new int3(1, 0, 0), GridSize, GridNoise);
-        values[3] = new GridEdge(position + new int3(0, 0, 0), GridSize, GridNoise);
+        values[0] = new GridEdge(position + new int3(0, 0, 1), gridSize, gridNoise);
+        values[1] = new GridEdge(position + new int3(1, 0, 1), gridSize, gridNoise);
+        values[2] = new GridEdge(position + new int3(1, 0, 0), gridSize, gridNoise);
+        values[3] = new GridEdge(position + new int3(0, 0, 0), gridSize, gridNoise);
 
-        values[4] = new GridEdge(position + new int3(0, 1, 1), GridSize, GridNoise);
-        values[5] = new GridEdge(position + new int3(1, 1, 1), GridSize, GridNoise);
-        values[6] = new GridEdge(position + new int3(1, 1, 0), GridSize, GridNoise);
-        values[7] = new GridEdge(position + new int3(0, 1, 0), GridSize, GridNoise);
+        values[4] = new GridEdge(position + new int3(0, 1, 1), gridSize, gridNoise);
+        values[5] = new GridEdge(position + new int3(1, 1, 1), gridSize, gridNoise);
+        values[6] = new GridEdge(position + new int3(1, 1, 0), gridSize, gridNoise);
+        values[7] = new GridEdge(position + new int3(0, 1, 0), gridSize, gridNoise);
 
         return values;
     }
 
-    private int DetermineIndex(in NativeArray<GridEdge> gridEdges)
+    public static int DetermineIndex(in float isoLevel, in NativeArray<GridEdge> gridEdges)
     {
         var cubeIndex = 0;
 
         for(int i = 0, j = 1; i < gridEdges.Length; i++, j += j)
-            if(gridEdges[i].val < Isolevel) cubeIndex |= j;
+            if(gridEdges[i].val < isoLevel) cubeIndex |= j;
 
         return cubeIndex;
     }
 
-    private NativeArray<Vertex> FindIntersectVertices(in int cubeIndex, in NativeArray<GridEdge> gridEdges, Allocator allocator)
+    public static NativeArray<Vertex> FindIntersectVertices(in int cubeIndex, in float isoLevel, in NativeArray<GridEdge> gridEdges, Allocator allocator)
     {
         var vertices = new NativeArray<Vertex>(12, allocator, NativeArrayOptions.UninitializedMemory);
 
@@ -97,7 +96,7 @@ public struct MarchingJob : IJobParallelFor
                 var indices = Constants.EdgeInterpTable[i];
                 vertices[i] = new Vertex
                 {
-                    pos = EdgesInterp(Isolevel, gridEdges[indices.x], gridEdges[indices.y])
+                    pos = EdgesInterp(isoLevel, gridEdges[indices.x], gridEdges[indices.y])
                 };
             }
         }
@@ -105,7 +104,17 @@ public struct MarchingJob : IJobParallelFor
         return vertices;
     }
 
-    private float3 EdgesInterp(float isolevel, GridEdge a, GridEdge b)
+    public static int GetVertexAmount(in int cubeIndex)
+    {
+        int vAmount = 0;
+
+        for(var i = 0; Constants.TriTable[cubeIndex * 16 + i] != -1; i += 3)
+            vAmount++;
+        
+        return vAmount;
+    }
+
+    public static float3 EdgesInterp(float isolevel, GridEdge a, GridEdge b)
     {
         if(math.abs(isolevel - a.val) < 0.00001f)
             return a.pos;
@@ -121,14 +130,15 @@ public struct MarchingJob : IJobParallelFor
     private void AddVertices(in int cubeIndex, in NativeArray<Vertex> vertices, ref NativeList<Vertex>.ParallelWriter v)
     {
         var _vertices = new NativeList<Vertex>(Constants.MAX_VERTEX_PER_BLOCK, Allocator.Temp);
+        var center = (float3)GridSize / 2f;
 
         for(var i = 0; Constants.TriTable[cubeIndex * 16 + i] != -1; i += 3)
         {
             var vert = new NativeArray<Vertex>(3, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-            var v0 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i    ]].pos };
-            var v1 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i + 1]].pos };
-            var v2 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i + 2]].pos };
+            var v0 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i    ]].pos - center };
+            var v1 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i + 1]].pos - center };
+            var v2 = new Vertex { pos = vertices[Constants.TriTable[cubeIndex * 16 + i + 2]].pos - center };
 
             _vertices.AddNoResize(v0);
             _vertices.AddNoResize(v1);
@@ -136,6 +146,26 @@ public struct MarchingJob : IJobParallelFor
         }
 
         v.AddRangeNoResize(_vertices);
+    }
+
+    public static JobHandle CreateAndSchedule(in Chunk chunk, in NativeArray<float> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
+    {
+        if(chunk.PointAmount != gridNoise.Length)
+            throw new System.Exception($"The length of the grid ({chunk.PointAmount}) not equal to the length of {nameof(gridNoise)} ({gridNoise.Length}) !");
+
+        var gridBlockAmount = (chunk.Size.x - 1) * (chunk.Size.y - 1) * (chunk.Size.z - 1);
+        
+        v = new NativeList<Vertex>(Constants.MAX_VERTEX_PER_BLOCK * gridBlockAmount, Allocator.TempJob);
+
+        return new MarchingJob
+        {
+            Isolevel    = chunk.IsoLevel,
+            GridSize    = chunk.Size,
+            GridNoise   = gridNoise,
+
+            Vertices    = v.AsParallelWriter(),
+        }
+        .Schedule(chunk.PointAmount, 1, inputDeps);
     }
 
     /// <summary>
@@ -163,8 +193,6 @@ public struct MarchingJob : IJobParallelFor
             GridNoise   = gridNoise,
 
             Vertices    = v.AsParallelWriter(),
-
-            VertexCounter = 0,
         }
         .Schedule(gridSettings.PointAmount, 1, inputDeps);
     }

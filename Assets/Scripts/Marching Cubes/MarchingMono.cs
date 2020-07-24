@@ -29,12 +29,11 @@ public class MarchingMono : MonoBehaviour
 
         handle = GridNoiseJob.CreateAndSchedule(gridSettings, noiseSettings, out NativeArray<float> gridNoise);
         handle = MarchingJob.CreateAndSchedule(gridSettings, gridNoise, out NativeList<Vertex> v, handle);
-       
         handle.Complete();
 
-        CalculateTrisJob.Create(v.AsArray(), out NativeArray<Triangle> t, handle).Complete();
+        CalculateTrisJob.Create(v, out NativeArray<Triangle> t, handle).Complete();
 
-        mesh.Update(t, v);
+        mesh.Update(t, v.AsArray());
         mesh.RecalculateNormals();
 
         gridNoise.Dispose();

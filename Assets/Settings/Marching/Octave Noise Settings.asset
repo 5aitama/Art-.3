@@ -16,7 +16,7 @@ MonoBehaviour:
     x: 0
     y: 0
     z: 0
-  frequency: 0.1
-  amplitude: 16
-  persistence: 0.5
+  frequency: 0.05
+  amplitude: 85.5
+  persistence: 0.3
   octaves: 4
