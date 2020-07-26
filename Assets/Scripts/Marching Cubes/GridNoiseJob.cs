@@ -26,29 +26,33 @@ public struct GridNoiseJob : IJobParallelFor
     [ReadOnly]
     public int Octaves;
 
+    [ReadOnly]
+    public int TerracedHeight;
+
     [WriteOnly]
-    public NativeArray<float> GridNoise;
+    public NativeArray<float4> GridNoise;
+
+    [ReadOnly]
+    public float3 PlanetPos;
+
+    [ReadOnly]
+    public float PlanetRadius;
 
     public void Execute(int index)
     {
         var pos = (float3)index.To3D(GridSize);
+        
         var worldPos = pos + Offset;
+        
+        var n = OctaveNoise(worldPos, Frequency, Amplitude, Persistence, Octaves);
+        n = (n + 1f) / 2f;
+        n *= Amplitude;
 
-        // if(SphereSDF(new float3(16, worldPos.y, worldPos.z) - worldPos, 4f) < 0)
-        //     GridNoise[index] = -1;
-        // else
-        // {
-            var n = OctaveNoise(worldPos, Frequency, Amplitude, Persistence, Octaves);
-            n = (n + 1) / 2f;
-            n *= Amplitude;
+        var dir = math.normalize(PlanetPos - worldPos);
 
-            GridNoise[index] = -worldPos.y + n + worldPos.y % 8;
-        // }
-    }
+        n += PlanetRadius - math.length(worldPos);
 
-    private float SphereSDF(float3 pos, float radius = 1f)
-    {
-        return math.length(pos) - radius;
+        GridNoise[index] = new float4(pos, n);
     }
 
     private float OctaveNoise(float3 pos, float frequency, float amplitude, float persistence, int octaves)
@@ -68,36 +72,22 @@ public struct GridNoiseJob : IJobParallelFor
         return total / max;
     }
 
-    public static JobHandle CreateAndSchedule(in Chunk chunk, out NativeArray<float> gridNoise, JobHandle inputDeps = default)
+    public static JobHandle CreateAndSchedule(in float3 planetPos, in float planetRadius, in ScriptableGrid gridSettings, in ScriptableOctaveNoise noiseSettings, out NativeArray<float4> gridNoise, JobHandle inputDeps = default)
     {
-        gridNoise = new NativeArray<float>(chunk.PointAmount, Allocator.TempJob);
+        gridNoise = new NativeArray<float4>(gridSettings.PointAmount, Allocator.TempJob);
 
         return new GridNoiseJob
         {
-            GridSize    = chunk.Size,
-            Offset      = chunk.NoisePosition,
-            Frequency   = chunk.NoiseFrequency,
-            Amplitude   = chunk.NoiseAmplitude,
-            Persistence = chunk.NoisePersistence,
-            Octaves     = chunk.NoiseOctaves,
-            GridNoise   = gridNoise,
-        }
-        .Schedule(gridNoise.Length, 32, inputDeps);
-    }
-
-    public static JobHandle CreateAndSchedule(in ScriptableGrid gridSettings, in ScriptableOctaveNoise noiseSettings, out NativeArray<float> gridNoise, JobHandle inputDeps = default)
-    {
-        gridNoise = new NativeArray<float>(gridSettings.PointAmount, Allocator.TempJob);
-
-        return new GridNoiseJob
-        {
-            GridSize    = gridSettings.size,
-            Offset      = noiseSettings.position,
-            Frequency   = noiseSettings.frequency,
-            Amplitude   = noiseSettings.amplitude,
-            Persistence = noiseSettings.persistence,
-            Octaves     = noiseSettings.octaves,
-            GridNoise   = gridNoise,
+            GridSize        = gridSettings.size,
+            Offset          = noiseSettings.position,
+            Frequency       = noiseSettings.frequency,
+            Amplitude       = noiseSettings.amplitude,
+            Persistence     = noiseSettings.persistence,
+            Octaves         = noiseSettings.octaves,
+            GridNoise       = gridNoise,
+            TerracedHeight  = noiseSettings.terracingHeight,
+            PlanetPos       = planetPos,
+            PlanetRadius    = planetRadius,
         }
         .Schedule(gridNoise.Length, 32, inputDeps);
     }

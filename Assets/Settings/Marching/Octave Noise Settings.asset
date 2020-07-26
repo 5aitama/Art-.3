@@ -16,7 +16,8 @@ MonoBehaviour:
     x: 0
     y: 0
     z: 0
-  frequency: 0.05
-  amplitude: 85.5
+  frequency: 0.041
+  amplitude: 29.5
   persistence: 0.3
   octaves: 4
+  terracingHeight: 7

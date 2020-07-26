@@ -17,4 +17,6 @@ public class ScriptableOctaveNoise : ScriptableObject
     
     [Range(1, 16)]
     public int octaves = 4;
+
+    public int terracingHeight = 4;
 }

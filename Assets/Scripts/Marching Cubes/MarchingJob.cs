@@ -18,10 +18,10 @@ public struct GridEdge
         this.val = val;
     }
 
-    public GridEdge(in int3 pos, in int3 gridSize, in NativeArray<float> gridNoise)
+    public GridEdge(in int3 pos, in int3 gridSize, in NativeArray<float4> gridNoise)
     {
         this.pos = pos;
-        this.val = gridNoise[pos.To1D(gridSize)];
+        this.val = gridNoise[pos.To1D(gridSize)].w;
     }
 }
 
@@ -32,7 +32,7 @@ public struct MarchingJob : IJobParallelFor
     public int3 GridSize;
 
     [ReadOnly]
-    public NativeArray<float> GridNoise;
+    public NativeArray<float4> GridNoise;
 
     [ReadOnly]
     public float Isolevel;
@@ -58,7 +58,7 @@ public struct MarchingJob : IJobParallelFor
         AddVertices(cubeIndex, vertices, ref Vertices);
     }
 
-    public static NativeArray<GridEdge> GetGridValues(in int3 position, in int3 gridSize, in NativeArray<float> gridNoise, Allocator allocator)
+    public static NativeArray<GridEdge> GetGridValues(in int3 position, in int3 gridSize, in NativeArray<float4> gridNoise, Allocator allocator)
     {
         var values = new NativeArray<GridEdge>(8, allocator, NativeArrayOptions.UninitializedMemory);
 
@@ -148,26 +148,6 @@ public struct MarchingJob : IJobParallelFor
         v.AddRangeNoResize(_vertices);
     }
 
-    public static JobHandle CreateAndSchedule(in Chunk chunk, in NativeArray<float> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
-    {
-        if(chunk.PointAmount != gridNoise.Length)
-            throw new System.Exception($"The length of the grid ({chunk.PointAmount}) not equal to the length of {nameof(gridNoise)} ({gridNoise.Length}) !");
-
-        var gridBlockAmount = (chunk.Size.x - 1) * (chunk.Size.y - 1) * (chunk.Size.z - 1);
-        
-        v = new NativeList<Vertex>(Constants.MAX_VERTEX_PER_BLOCK * gridBlockAmount, Allocator.TempJob);
-
-        return new MarchingJob
-        {
-            Isolevel    = chunk.IsoLevel,
-            GridSize    = chunk.Size,
-            GridNoise   = gridNoise,
-
-            Vertices    = v.AsParallelWriter(),
-        }
-        .Schedule(chunk.PointAmount, 1, inputDeps);
-    }
-
     /// <summary>
     /// Create and schedule new MarchingJob.
     /// </summary>
@@ -177,7 +157,7 @@ public struct MarchingJob : IJobParallelFor
     /// <param name="v">The vertices generated</param>
     /// <param name="inputDeps">Job dependency</param>
     /// <returns></returns>
-    public static JobHandle CreateAndSchedule(in ScriptableGrid gridSettings, in NativeArray<float> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
+    public static JobHandle CreateAndSchedule(in ScriptableGrid gridSettings, in NativeArray<float4> gridNoise, out NativeList<Vertex> v, JobHandle inputDeps = default)
     {
         if(gridSettings.PointAmount != gridNoise.Length)
             throw new System.Exception($"The length of the grid ({gridSettings.PointAmount}) not equal to the length of {nameof(gridNoise)} ({gridNoise.Length}) !");

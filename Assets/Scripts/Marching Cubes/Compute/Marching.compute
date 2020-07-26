@@ -1,0 +1,81 @@
+﻿
+#pragma kernel Marching
+#include "MarchingStruct.compute"
+#include "MarchingConstant.compute"
+
+int3 m_Size;
+float m_Isolevel;
+
+StructuredBuffer<GridPoint> m_GridPointBuffer;
+AppendStructuredBuffer<Triangle> m_TriBuffer;
+
+int To1Dimension(uint3 v)
+{
+    return v.x + v.y * m_Size.x + v.z * m_Size.x * m_Size.y;
+}
+
+void NeightbourGridPoint(uint3 id, out GridPoint points[8])
+{
+    for(int i = 0; i < 8; i++)
+    {
+        points[i] = m_GridPointBuffer[To1Dimension(id + GRID_POINTS_POS[i])];
+    }
+}
+
+float3 VertexInterp(GridPoint a, GridPoint b)
+{
+    if(abs(m_Isolevel - a.value.w) < 0.00001) 
+        return a.value.xyz;
+    else if(abs(m_Isolevel - b.value.w) < 0.00001) 
+        return b.value.xyz;
+    else if(abs(a.value.w - b.value.w) < 0.00001) 
+        return a.value.xyz;
+    else 
+    {
+        float mu = (m_Isolevel - a.value.w) / (b.value.w - a.value.w);
+        return a.value.xyz + mu * (b.value.xyz - a.value.xyz);
+    }
+}
+
+[numthreads(8, 8, 8)]
+void Marching (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= (uint)m_Size.x - 1 || id.y >= (uint)m_Size.y - 1 || id.z >= (uint)m_Size.z - 1) return;
+
+    int cubeindex = 0;
+
+    GridPoint points[8];
+    NeightbourGridPoint(id, points);
+
+    for(int i = 0, j = 1; i < 8; i++, j += j)
+    {
+        if(points[i].value.w < m_Isolevel) cubeindex |= j;
+    }
+
+    /* Cube is entirely in/out of the surface */
+    if (edgeTable[cubeindex] == 0) return;
+
+    float3 vertlist[12];
+
+    for(i = 0, j = 1; i < 12; i++, j += j)
+    {
+        if(edgeTable[cubeindex] & j) 
+        {
+            vertlist[i] = VertexInterp(points[VERTEX_INTERCEPT_INDEX[i].x], points[VERTEX_INTERCEPT_INDEX[i].y]);
+        }
+    }
+
+    for (i = 0; triTable[cubeindex * 16 + i] != -1; i += 3) 
+    {
+        Triangle t;
+        
+        t.a = vertlist[triTable[cubeindex * 16 + i    ]];
+        t.b = vertlist[triTable[cubeindex * 16 + i + 1]];
+        t.c = vertlist[triTable[cubeindex * 16 + i + 2]];
+        // t.a = float3(0, 0, 0);
+        // t.b = float3(1, 0, 0);
+        // t.c = float3(2, 0, 0);
+        m_TriBuffer.Append(t);
+    }
+
+}

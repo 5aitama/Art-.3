@@ -1,0 +1,11 @@
+﻿struct Triangle 
+{
+    float3 a;
+    float3 b;
+    float3 c;
+};
+
+struct GridPoint
+{
+    float4 value;
+};
