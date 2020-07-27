@@ -40,16 +40,13 @@ public struct GridNoiseJob : IJobParallelFor
 
     public void Execute(int index)
     {
-        var pos = (float3)index.To3D(GridSize);
+        var pos = (float3)index.To3D(GridSize) - (float3)GridSize / 2f;
         
         var worldPos = pos + Offset;
         
         var n = OctaveNoise(worldPos, Frequency, Amplitude, Persistence, Octaves);
         n = (n + 1f) / 2f;
         n *= Amplitude;
-
-        var dir = math.normalize(PlanetPos - worldPos);
-
         n += PlanetRadius - math.length(worldPos);
 
         GridNoise[index] = new float4(pos, n);
@@ -72,22 +69,19 @@ public struct GridNoiseJob : IJobParallelFor
         return total / max;
     }
 
-    public static JobHandle CreateAndSchedule(in float3 planetPos, in float planetRadius, in ScriptableGrid gridSettings, in ScriptableOctaveNoise noiseSettings, out NativeArray<float4> gridNoise, JobHandle inputDeps = default)
+    public static JobHandle CreateAndSchedule(in PlanetDesc planetDesc, in int3 gridSize, in float3 position, ref NativeArray<float4> gridNoise, JobHandle inputDeps = default)
     {
-        gridNoise = new NativeArray<float4>(gridSettings.PointAmount, Allocator.TempJob);
-
         return new GridNoiseJob
         {
-            GridSize        = gridSettings.size,
-            Offset          = noiseSettings.position,
-            Frequency       = noiseSettings.frequency,
-            Amplitude       = noiseSettings.amplitude,
-            Persistence     = noiseSettings.persistence,
-            Octaves         = noiseSettings.octaves,
+            GridSize        = gridSize,
+            Offset          = planetDesc.noiseDesc.Position + position,
+            Frequency       = planetDesc.noiseDesc.Frequency,
+            Amplitude       = planetDesc.noiseDesc.Amplitude,
+            Persistence     = planetDesc.noiseDesc.Persistance,
+            Octaves         = planetDesc.noiseDesc.Octaves,
             GridNoise       = gridNoise,
-            TerracedHeight  = noiseSettings.terracingHeight,
-            PlanetPos       = planetPos,
-            PlanetRadius    = planetRadius,
+            PlanetPos       = planetDesc.position,
+            PlanetRadius    = planetDesc.radius,
         }
         .Schedule(gridNoise.Length, 32, inputDeps);
     }

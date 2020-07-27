@@ -3,7 +3,7 @@
 # Art-.3
 ![](https://img.shields.io/badge/Unity-2020.1.0f1-brightgreen)
 
-**Sorry about the mess in the code, but I did the project in a hurry. I will reorganize the project as changes are made.**
+> ⚠ I currently re organize the entire project. To debug some things i need to use traditional `MonoBehaviour` script so don't apologize if you see `MonoBehaviour` script 😉
 
 ## About
 
